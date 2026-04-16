@@ -25,9 +25,21 @@ export async function listCandidates(params: ListQuery): Promise<CandidateListRe
   return data;
 }
 
+function parseJsonField<T>(value: unknown): T | null {
+  if (Array.isArray(value)) return value as T;
+  if (typeof value === 'string') {
+    try { return JSON.parse(value) as T; } catch { return null; }
+  }
+  return null;
+}
+
 export async function getCandidate(id: number): Promise<CandidateRow> {
   const { data } = await api.get<{ data: CandidateRow }>(`/candidates/${id}`);
-  return data.data;
+  const c = data.data;
+  c.usedHashtags = parseJsonField<string[]>(c.usedHashtags);
+  c.sampleImageUrls = parseJsonField<string[]>(c.sampleImageUrls) ?? [];
+  c.sampleVideos = parseJsonField<string[]>(c.sampleVideos) ?? [];
+  return c;
 }
 
 export async function createCandidate(body: CreateCandidateBody): Promise<CandidateRow> {
