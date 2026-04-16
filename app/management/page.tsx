@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Image from 'next/image';
 import Link from 'next/link';
-import { listCandidates, updateCandidate, listReviewsBulk } from '@/lib/api';
+import { listCandidates, updateCandidate, listReviewsBulk, listAllReviews } from '@/lib/api';
 import type { CandidateListResponse, CandidateWithExtras, ReviewRow } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -116,17 +116,37 @@ export default function ManagementPage() {
   const [page, setPage] = useState(1);
   const [gender, setGender] = useState<string>('전체');
   const [reviewStatus, setReviewStatus] = useState<string>('전체');
+  const [selectedReviewer, setSelectedReviewer] = useState<string>('전체');
 
   const statuses = reviewStatus === '전체' ? '합격,보류,불합격' : reviewStatus;
 
+  // Fetch all reviews to extract unique reviewer names
+  const { data: allReviews } = useQuery<ReviewRow[]>({
+    queryKey: ['all-reviews'],
+    queryFn: () => listAllReviews(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const reviewerOptions = (() => {
+    if (!allReviews) return [];
+    const nameMap = new Map<string, string>();
+    for (const r of allReviews) {
+      if (r.reviewerId) {
+        nameMap.set(r.reviewerId, r.reviewerName ?? r.reviewerId);
+      }
+    }
+    return Array.from(nameMap.entries()).map(([id, name]) => ({ id, name }));
+  })();
+
   const { data, isLoading } = useQuery<CandidateListResponse>({
-    queryKey: ['management-candidates', { page, gender, statuses }],
+    queryKey: ['management-candidates', { page, gender, statuses, selectedReviewer }],
     queryFn: () =>
       listCandidates({
         page,
         limit: 20,
         reviewStatuses: statuses,
         gender: gender === '전체' ? undefined : gender,
+        userId: selectedReviewer === '전체' ? undefined : selectedReviewer,
       }),
   });
 
@@ -180,6 +200,17 @@ export default function ManagementPage() {
           <option value="합격">합격</option>
           <option value="보류">보류</option>
           <option value="불합격">불합격</option>
+        </select>
+
+        <select
+          value={selectedReviewer}
+          onChange={(e) => { setSelectedReviewer(e.target.value); setPage(1); }}
+          className="px-3 py-2 rounded-lg border bg-white text-sm"
+        >
+          <option value="전체">검토자: 전체</option>
+          {reviewerOptions.map((r) => (
+            <option key={r.id} value={r.id}>{r.name}</option>
+          ))}
         </select>
 
         {data && (

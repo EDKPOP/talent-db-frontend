@@ -208,6 +208,31 @@ export default function CandidateDetailPage() {
               </div>
             )}
 
+            {/* Body info */}
+            {(candidate.heightCm || candidate.weightKg) && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {candidate.heightCm && (
+                  <InfoBadge label="키" value={`${candidate.heightCm}cm`} />
+                )}
+                {candidate.weightKg && (
+                  <InfoBadge label="몸무게" value={`${candidate.weightKg}kg`} />
+                )}
+                {candidate.bodyRecordDate && (
+                  <InfoBadge label="측정일" value={candidate.bodyRecordDate} />
+                )}
+              </div>
+            )}
+
+            {/* Contact info */}
+            {candidate.contact && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                <InfoBadge label="연락처" value={candidate.contact} />
+                {candidate.contactType && (
+                  <InfoBadge label="관계" value={candidate.contactType} />
+                )}
+              </div>
+            )}
+
             {/* Hashtags */}
             {candidate.usedHashtags && candidate.usedHashtags.length > 0 && (
               <div className="mt-4 flex flex-wrap gap-1.5">
@@ -219,6 +244,32 @@ export default function CandidateDetailPage() {
               </div>
             )}
           </div>
+
+          {/* Sample images gallery */}
+          {candidate.sampleImageUrls && candidate.sampleImageUrls.length > 0 && (
+            <div className="bg-white rounded-xl p-6 shadow-sm">
+              <h3 className="text-sm font-semibold text-gray-500 mb-3">샘플 이미지</h3>
+              <div className="grid grid-cols-3 gap-2">
+                {candidate.sampleImageUrls.map((url, i) => (
+                  <div key={i} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100">
+                    <Image src={url} alt={`Sample ${i + 1}`} fill className="object-cover" sizes="150px" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Sample videos */}
+          {candidate.sampleVideos && candidate.sampleVideos.length > 0 && (
+            <div className="bg-white rounded-xl p-6 shadow-sm">
+              <h3 className="text-sm font-semibold text-gray-500 mb-3">샘플 비디오</h3>
+              <div className="space-y-2">
+                {candidate.sampleVideos.map((url, i) => (
+                  <video key={i} src={url} controls className="w-full rounded-lg" />
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Review actions */}
           <div className="bg-white rounded-xl p-6 shadow-sm">

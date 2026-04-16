@@ -104,10 +104,11 @@ export default function CandidatesPage() {
   const [reviewStatus, setReviewStatus] = useState<string>('전체');
   const [gender, setGender] = useState<string>('전체');
   const [selectedYears, setSelectedYears] = useState<number[]>([]);
+  const [includeUnknownBirthYear, setIncludeUnknownBirthYear] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   const { data, isLoading } = useQuery<CandidateListResponse>({
-    queryKey: ['candidates', { page, reviewStatus, gender, selectedYears }],
+    queryKey: ['candidates', { page, reviewStatus, gender, selectedYears, includeUnknownBirthYear }],
     queryFn: () =>
       listCandidates({
         page,
@@ -115,6 +116,7 @@ export default function CandidatesPage() {
         reviewStatus: reviewStatus === '전체' ? undefined : reviewStatus,
         gender: gender === '전체' ? undefined : gender,
         birthYears: selectedYears.length > 0 ? selectedYears.map(String) : undefined,
+        includeUnknownBirthYear: includeUnknownBirthYear ? 'true' : undefined,
       }),
   });
 
@@ -220,6 +222,17 @@ export default function CandidatesPage() {
               {year}
             </button>
           ))}
+          <button
+            onClick={() => { setIncludeUnknownBirthYear((v) => !v); setPage(1); }}
+            className={cn(
+              'px-2 py-1 text-xs rounded transition-colors',
+              includeUnknownBirthYear
+                ? 'bg-blue-500 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200',
+            )}
+          >
+            미확인
+          </button>
         </div>
       </div>
 

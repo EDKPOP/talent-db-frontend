@@ -58,6 +58,11 @@ export async function listReviews(candidateId: number): Promise<ReviewRow[]> {
   return data.data;
 }
 
+export async function listAllReviews(): Promise<ReviewRow[]> {
+  const { data } = await api.get<{ data: ReviewRow[] }>('/reviews');
+  return data.data;
+}
+
 export async function listReviewsBulk(candidateIds: number[]): Promise<ReviewRow[]> {
   const { data } = await api.get<{ data: ReviewRow[] }>('/reviews', {
     params: { candidateIds: candidateIds.join(',') },
