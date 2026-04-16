@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useCallback, useSyncExternalStore } from 'react';
+import { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
 
 interface AuthState {
   email: string;
@@ -18,57 +18,47 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 const STORAGE_KEY = 'casting-db-auth';
 
-// Module-scoped subscription for useSyncExternalStore
-const listeners = new Set<() => void>();
-function subscribe(callback: () => void) {
-  listeners.add(callback);
-  return () => { listeners.delete(callback); };
-}
-function notifyListeners() {
-  for (const fn of listeners) fn();
-}
+type State = { user: AuthState | null; isLoading: boolean };
+type Action =
+  | { type: 'hydrate'; user: AuthState | null }
+  | { type: 'login'; user: AuthState }
+  | { type: 'logout' };
 
-// Cached snapshot to avoid re-parsing JSON on every render
-let cachedRaw: string | null | undefined;
-let cachedUser: AuthState | null = null;
-
-function getSnapshot(): AuthState | null {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (raw !== cachedRaw) {
-    cachedRaw = raw;
-    if (!raw) {
-      cachedUser = null;
-    } else {
-      try { cachedUser = JSON.parse(raw); }
-      catch { cachedUser = null; }
-    }
+function reducer(_state: State, action: Action): State {
+  switch (action.type) {
+    case 'hydrate': return { user: action.user, isLoading: false };
+    case 'login': return { user: action.user, isLoading: false };
+    case 'logout': return { user: null, isLoading: false };
   }
-  return cachedUser;
-}
-
-function getServerSnapshot(): AuthState | null {
-  return null;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const user = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const [state, dispatch] = useReducer(reducer, { user: null, isLoading: true });
+
+  useEffect(() => {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    let user: AuthState | null = null;
+    if (stored) {
+      try { user = JSON.parse(stored); }
+      catch { localStorage.removeItem(STORAGE_KEY); }
+    }
+    dispatch({ type: 'hydrate', user });
+  }, []);
 
   const login = useCallback((email: string) => {
     const reviewerName = email.split('@')[0];
-    const state: AuthState = { email, reviewerName };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    cachedRaw = undefined; // invalidate cache
-    notifyListeners();
+    const authState: AuthState = { email, reviewerName };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(authState));
+    dispatch({ type: 'login', user: authState });
   }, []);
 
   const logout = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
-    cachedRaw = undefined; // invalidate cache
-    notifyListeners();
+    dispatch({ type: 'logout' });
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading: false, login, logout }}>
+    <AuthContext.Provider value={{ user: state.user, isLoading: state.isLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
