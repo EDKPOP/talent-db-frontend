@@ -99,7 +99,15 @@ jobs:
             "https://api.vercel.com/v9/projects/${{ secrets.VERCEL_PROJECT_ID }}?teamId=${{ secrets.VERCEL_ORG_ID }}" \
             -H "Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d '{"ssoProtection":null}' || true
+            -d '{"ssoProtection":null,"passwordProtection":null}' || true
+
+      - name: Add custom domain
+        run: |
+          curl -s -X POST \
+            "https://api.vercel.com/v10/projects/${{ secrets.VERCEL_PROJECT_ID }}/domains?teamId=${{ secrets.VERCEL_ORG_ID }}" \
+            -H "Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"name":"casting.keens.academy"}' || true
 
       - name: Deploy to Vercel (Production)
         id: deploy
