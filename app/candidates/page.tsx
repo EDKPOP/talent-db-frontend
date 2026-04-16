@@ -115,7 +115,7 @@ export default function CandidatesPage() {
         limit: 20,
         reviewStatus: reviewStatus === '전체' ? undefined : reviewStatus,
         gender: gender === '전체' ? undefined : gender,
-        birthYears: selectedYears.length > 0 ? selectedYears.map(String) : undefined,
+        birthYears: selectedYears.length > 0 ? selectedYears.join(',') : undefined,
         includeUnknownBirthYear: includeUnknownBirthYear ? 'true' : undefined,
       }),
   });
