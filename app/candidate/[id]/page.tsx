@@ -15,6 +15,7 @@ import {
 } from '@/lib/api';
 import type { CandidateRow, ReviewRow, CommentRow } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/lib/auth-context';
 
 const REVIEW_STATUSES = ['합격', '보류', '불합격'] as const;
 
@@ -52,8 +53,9 @@ export default function CandidateDetailPage() {
   const listPage = searchParams.get('page') ?? '1';
 
   const [commentText, setCommentText] = useState('');
-  const reviewerId = 'gr.lee@c-3.co';
-  const reviewerName = 'gr.lee';
+  const { user } = useAuth();
+  const reviewerId = user?.email ?? '';
+  const reviewerName = user?.reviewerName ?? '';
 
   const { data: candidate, isLoading } = useQuery<CandidateRow>({
     queryKey: ['candidate', id],

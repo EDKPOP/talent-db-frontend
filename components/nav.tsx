@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/lib/auth-context';
 
 const NAV_ITEMS = [
   { href: '/', label: '대시보드', icon: '📊' },
@@ -12,6 +13,9 @@ const NAV_ITEMS = [
 
 export function Nav() {
   const pathname = usePathname();
+  const { user, logout } = useAuth();
+
+  if (!user || pathname === '/login') return null;
 
   return (
     <nav className="flex items-center gap-1 bg-white border-b px-6 py-3">
@@ -39,6 +43,15 @@ export function Nav() {
           </Link>
         );
       })}
+      <div className="ml-auto flex items-center gap-3">
+        <span className="text-sm text-gray-500">{user.email}</span>
+        <button
+          onClick={logout}
+          className="text-sm text-gray-400 hover:text-gray-700 transition-colors"
+        >
+          Logout
+        </button>
+      </div>
     </nav>
   );
 }
