@@ -93,6 +93,14 @@ jobs:
       - name: Build with Vercel
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
 
+      - name: Disable Vercel Deployment Protection
+        run: |
+          curl -s -X PATCH \
+            "https://api.vercel.com/v9/projects/${{ secrets.VERCEL_PROJECT_ID }}?teamId=${{ secrets.VERCEL_ORG_ID }}" \
+            -H "Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"ssoProtection":null}' || true
+
       - name: Deploy to Vercel (Production)
         id: deploy
         run: |

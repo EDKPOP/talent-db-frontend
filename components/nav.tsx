@@ -20,7 +20,7 @@ export function Nav() {
   return (
     <nav className="flex items-center gap-1 bg-white border-b px-6 py-3">
       <Link href="/" className="text-lg font-bold mr-8">
-        EDKPOP Casting DB
+        KEENS Casting DB
       </Link>
       {NAV_ITEMS.map((item) => {
         const isActive =

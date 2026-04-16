@@ -4,7 +4,7 @@ import { Nav } from "@/components/nav";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "EDKPOP Casting DB",
+  title: "KEENS Casting DB",
   description: "K-pop talent casting platform",
 };
 
