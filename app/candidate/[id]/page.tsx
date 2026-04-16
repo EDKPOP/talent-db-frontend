@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useParams, useSearchParams, useRouter } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import {
@@ -47,7 +47,6 @@ function ReviewStatusBadge({ status }: { status: string | null }) {
 export default function CandidateDetailPage() {
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
-  const router = useRouter();
   const queryClient = useQueryClient();
   const filter = searchParams.get('filter') ?? '';
   const listPage = searchParams.get('page') ?? '1';

@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useCallback, useSyncExternalStore } from 'react';
 
 interface AuthState {
   email: string;
@@ -18,36 +18,57 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 const STORAGE_KEY = 'casting-db-auth';
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AuthState | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+// Module-scoped subscription for useSyncExternalStore
+const listeners = new Set<() => void>();
+function subscribe(callback: () => void) {
+  listeners.add(callback);
+  return () => { listeners.delete(callback); };
+}
+function notifyListeners() {
+  for (const fn of listeners) fn();
+}
 
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try {
-        setUser(JSON.parse(stored));
-      } catch {
-        localStorage.removeItem(STORAGE_KEY);
-      }
+// Cached snapshot to avoid re-parsing JSON on every render
+let cachedRaw: string | null | undefined;
+let cachedUser: AuthState | null = null;
+
+function getSnapshot(): AuthState | null {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (raw !== cachedRaw) {
+    cachedRaw = raw;
+    if (!raw) {
+      cachedUser = null;
+    } else {
+      try { cachedUser = JSON.parse(raw); }
+      catch { cachedUser = null; }
     }
-    setIsLoading(false);
-  }, []);
+  }
+  return cachedUser;
+}
+
+function getServerSnapshot(): AuthState | null {
+  return null;
+}
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const user = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   const login = useCallback((email: string) => {
     const reviewerName = email.split('@')[0];
     const state: AuthState = { email, reviewerName };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    setUser(state);
+    cachedRaw = undefined; // invalidate cache
+    notifyListeners();
   }, []);
 
   const logout = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
-    setUser(null);
+    cachedRaw = undefined; // invalidate cache
+    notifyListeners();
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isLoading: false, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

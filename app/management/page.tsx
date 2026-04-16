@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Image from 'next/image';
 import Link from 'next/link';
-import { listCandidates, updateCandidate, listReviewsBulk, listAllReviews } from '@/lib/api';
+import { listCandidates, updateCandidate, listReviewsBulk } from '@/lib/api';
 import type { CandidateListResponse, CandidateWithExtras, ReviewRow } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -120,33 +120,14 @@ export default function ManagementPage() {
 
   const statuses = reviewStatus === '전체' ? '합격,보류,불합격' : reviewStatus;
 
-  // Fetch all reviews to extract unique reviewer names
-  const { data: allReviews } = useQuery<ReviewRow[]>({
-    queryKey: ['all-reviews'],
-    queryFn: () => listAllReviews(),
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const reviewerOptions = (() => {
-    if (!allReviews) return [];
-    const nameMap = new Map<string, string>();
-    for (const r of allReviews) {
-      if (r.reviewerId) {
-        nameMap.set(r.reviewerId, r.reviewerName ?? r.reviewerId);
-      }
-    }
-    return Array.from(nameMap.entries()).map(([id, name]) => ({ id, name }));
-  })();
-
   const { data, isLoading } = useQuery<CandidateListResponse>({
-    queryKey: ['management-candidates', { page, gender, statuses, selectedReviewer }],
+    queryKey: ['management-candidates', { page, gender, statuses }],
     queryFn: () =>
       listCandidates({
         page,
         limit: 20,
         reviewStatuses: statuses,
         gender: gender === '전체' ? undefined : gender,
-        userId: selectedReviewer === '전체' ? undefined : selectedReviewer,
       }),
   });
 
@@ -166,6 +147,28 @@ export default function ManagementPage() {
       reviewsByCandidate.set(r.candidateId, arr);
     }
   }
+
+  // Build distinct reviewer list from loaded reviews
+  const reviewerOptions = (() => {
+    if (!reviewsData) return [];
+    const nameMap = new Map<string, string>();
+    for (const r of reviewsData) {
+      if (r.reviewerId) {
+        nameMap.set(r.reviewerId, r.reviewerName ?? r.reviewerId);
+      }
+    }
+    return Array.from(nameMap.entries()).map(([id, name]) => ({ id, name }));
+  })();
+
+  // Filter candidates client-side by selected reviewer
+  const filteredCandidates = (() => {
+    if (!data?.data) return [];
+    if (selectedReviewer === '전체') return data.data;
+    return data.data.filter((c) => {
+      const reviews = reviewsByCandidate.get(c.id) ?? [];
+      return reviews.some((r) => r.reviewerId === selectedReviewer);
+    });
+  })();
 
   const contactMutation = useMutation({
     mutationFn: ({ id, contactStatus }: { id: number; contactStatus: string }) =>
@@ -228,7 +231,7 @@ export default function ManagementPage() {
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-          {data?.data.map((candidate) => (
+          {filteredCandidates.map((candidate) => (
             <ManagementCard
               key={candidate.id}
               candidate={candidate}
