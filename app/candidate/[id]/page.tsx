@@ -181,7 +181,22 @@ export default function CandidateDetailPage() {
           {/* Basic info card */}
           <div className="bg-white rounded-xl p-6 shadow-sm">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold">@{candidate.username}</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-bold">@{candidate.username}</h2>
+                <a
+                  href={`https://www.instagram.com/${candidate.username}/`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    window.open(`https://www.instagram.com/${candidate.username}/`, '_blank', 'noopener,noreferrer');
+                  }}
+                  className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 text-white text-sm hover:opacity-80 transition-opacity"
+                  title="Instagram 프로필 열기"
+                >
+                  IG
+                </a>
+              </div>
               <ReviewStatusBadge status={candidate.reviewStatus} />
             </div>
 
