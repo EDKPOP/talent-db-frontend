@@ -105,21 +105,11 @@ export default function CandidateDetailPage() {
 
   const backUrl = `/candidates${filter ? `?reviewStatus=${filter}&page=${listPage}` : `?page=${listPage}`}`;
 
-  return (
-    <div className="max-w-6xl mx-auto">
-      {/* Navigation */}
-      <div className="flex items-center justify-between mb-6">
-        <Link href={backUrl} className="text-sm text-gray-500 hover:text-gray-900 flex items-center gap-1">
-          ← 목록으로 돌아가기
-        </Link>
-        <Link
-          href={`/candidate/${Number(id) + 1}?${searchParams.toString()}`}
-          className="text-sm text-gray-500 hover:text-gray-900"
-        >
-          다음 후보 →
-        </Link>
-      </div>
+  const prevId = Number(id) - 1;
+  const nextId = Number(id) + 1;
 
+  return (
+    <div className="max-w-6xl mx-auto pb-24">
       <div className="grid grid-cols-12 gap-6">
         {/* Left column: images */}
         <div className="col-span-12 md:col-span-5 space-y-4">
@@ -270,40 +260,18 @@ export default function CandidateDetailPage() {
             </div>
           )}
 
-          {/* Review actions */}
+          {/* Contact status */}
           <div className="bg-white rounded-xl p-6 shadow-sm">
-            <h3 className="text-sm font-semibold mb-3">리뷰 하기</h3>
-            <div className="flex gap-2">
-              {REVIEW_STATUSES.map((status) => (
-                <button
-                  key={status}
-                  onClick={() => reviewMutation.mutate(status)}
-                  disabled={reviewMutation.isPending}
-                  className={cn(
-                    'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-                    status === '합격' && 'bg-green-500 text-white hover:bg-green-600',
-                    status === '보류' && 'bg-yellow-500 text-white hover:bg-yellow-600',
-                    status === '불합격' && 'bg-red-500 text-white hover:bg-red-600',
-                  )}
-                >
-                  {status}
-                </button>
+            <h3 className="text-sm font-semibold mb-3">컨택 상태</h3>
+            <select
+              value={candidate.contactStatus ?? '미연락'}
+              onChange={(e) => contactMutation.mutate(e.target.value)}
+              className="px-3 py-1.5 rounded-lg border text-sm"
+            >
+              {['미연락', 'DM 발송', '답변 완료', '진행 중', '거절'].map((s) => (
+                <option key={s} value={s}>{s}</option>
               ))}
-            </div>
-
-            {/* Contact status */}
-            <div className="mt-4 pt-4 border-t">
-              <label className="text-sm text-gray-500 mr-2">컨택 상태:</label>
-              <select
-                value={candidate.contactStatus ?? '미연락'}
-                onChange={(e) => contactMutation.mutate(e.target.value)}
-                className="px-3 py-1.5 rounded-lg border text-sm"
-              >
-                {['미연락', 'DM 발송', '답변 완료', '진행 중', '거절'].map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </div>
+            </select>
           </div>
 
           {/* Review history & comments */}
@@ -363,6 +331,55 @@ export default function CandidateDetailPage() {
               </button>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Fixed bottom bar */}
+      <div className="fixed bottom-0 inset-x-0 bg-white border-t shadow-[0_-2px_8px_rgba(0,0,0,0.08)] z-50 pb-[env(safe-area-inset-bottom)]">
+        <div className="max-w-6xl mx-auto flex items-center justify-between px-4 py-3">
+          {/* Previous candidate */}
+          {prevId >= 1 ? (
+            <Link
+              href={`/candidate/${prevId}?${searchParams.toString()}`}
+              className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900 min-h-[44px] px-2"
+            >
+              ← 이전 후보
+            </Link>
+          ) : (
+            <Link
+              href={backUrl}
+              className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900 min-h-[44px] px-2"
+            >
+              ← 목록
+            </Link>
+          )}
+
+          {/* Review buttons */}
+          <div className="flex gap-2">
+            {REVIEW_STATUSES.map((status) => (
+              <button
+                key={status}
+                onClick={() => reviewMutation.mutate(status)}
+                disabled={reviewMutation.isPending}
+                className={cn(
+                  'px-5 py-2.5 rounded-lg text-sm font-medium transition-colors min-h-[44px]',
+                  status === '합격' && 'bg-green-500 text-white hover:bg-green-600',
+                  status === '보류' && 'bg-yellow-500 text-white hover:bg-yellow-600',
+                  status === '불합격' && 'bg-red-500 text-white hover:bg-red-600',
+                )}
+              >
+                {status}
+              </button>
+            ))}
+          </div>
+
+          {/* Next candidate */}
+          <Link
+            href={`/candidate/${nextId}?${searchParams.toString()}`}
+            className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900 min-h-[44px] px-2"
+          >
+            다음 후보 →
+          </Link>
         </div>
       </div>
     </div>
