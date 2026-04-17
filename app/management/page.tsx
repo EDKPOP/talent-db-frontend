@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Image from 'next/image';
 import Link from 'next/link';
-import { listCandidates, updateCandidate, listReviewsBulk } from '@/lib/api';
+import { listCandidates, updateCandidate, listReviewsBulk, listDistinctReviewers } from '@/lib/api';
 import type { CandidateListResponse, CandidateWithExtras, ReviewRow } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -117,18 +117,15 @@ export default function ManagementPage() {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [gender, setGender] = useState<string>('전체');
-  const [reviewStatus, setReviewStatus] = useState<string>('전체');
   const [selectedReviewer, setSelectedReviewer] = useState<string>('전체');
 
-  const statuses = reviewStatus === '전체' ? '합격,보류,불합격' : reviewStatus;
-
   const { data, isLoading } = useQuery<CandidateListResponse>({
-    queryKey: ['management-candidates', { page, gender, statuses }],
+    queryKey: ['management-candidates', { page, gender }],
     queryFn: () =>
       listCandidates({
         page,
         limit: 20,
-        reviewStatuses: statuses,
+        reviewStatuses: '합격',
         gender: gender === '전체' ? undefined : gender,
       }),
   });
@@ -150,17 +147,10 @@ export default function ManagementPage() {
     }
   }
 
-  // Build distinct reviewer list from loaded reviews
-  const reviewerOptions = (() => {
-    if (!reviewsData) return [];
-    const nameMap = new Map<string, string>();
-    for (const r of reviewsData) {
-      if (r.reviewerId) {
-        nameMap.set(r.reviewerId, r.reviewerName ?? r.reviewerId);
-      }
-    }
-    return Array.from(nameMap.entries()).map(([id, name]) => ({ id, name }));
-  })();
+  const { data: reviewerOptions = [] } = useQuery({
+    queryKey: ['distinct-reviewers'],
+    queryFn: listDistinctReviewers,
+  });
 
   // Filter candidates client-side by selected reviewer
   const filteredCandidates = (() => {
@@ -182,7 +172,7 @@ export default function ManagementPage() {
 
   const navParams = new URLSearchParams({
     source: 'management',
-    reviewStatuses: statuses,
+    reviewStatuses: '합격',
     page: String(page),
     ...(gender !== '전체' ? { gender } : {}),
   }).toString();
@@ -201,17 +191,6 @@ export default function ManagementPage() {
           <option value="전체">성별: 전체</option>
           <option value="여성">여성</option>
           <option value="남성">남성</option>
-        </select>
-
-        <select
-          value={reviewStatus}
-          onChange={(e) => { setReviewStatus(e.target.value); setPage(1); }}
-          className="px-3 py-2 rounded-lg border bg-white text-sm"
-        >
-          <option value="전체">상태: 전체</option>
-          <option value="합격">합격</option>
-          <option value="보류">보류</option>
-          <option value="불합격">불합격</option>
         </select>
 
         <select

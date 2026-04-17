@@ -77,6 +77,11 @@ export async function listReviewsBulk(candidateIds: number[]): Promise<ReviewRow
   return data.data;
 }
 
+export async function listDistinctReviewers(): Promise<{ id: string; name: string }[]> {
+  const { data } = await api.get<{ data: { id: string; name: string }[] }>('/reviews/reviewers');
+  return data.data;
+}
+
 export async function createReview(body: CreateReviewBody): Promise<ReviewRow> {
   const { data } = await api.post<{ data: ReviewRow }>('/reviews', body);
   return data.data;
