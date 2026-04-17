@@ -7,13 +7,14 @@ import Image from 'next/image';
 import Link from 'next/link';
 import {
   getCandidate,
+  listCandidates,
   listReviews,
   listComments,
   createReview,
   createComment,
   updateCandidate,
 } from '@/lib/api';
-import type { CandidateRow, ReviewRow, CommentRow } from '@/lib/types';
+import type { CandidateRow, CandidateListResponse, ReviewRow, CommentRow } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
 
@@ -56,9 +57,19 @@ export default function CandidateDetailPage() {
   const reviewerId = user?.email ?? '';
   const reviewerName = user?.reviewerName ?? '';
 
-  const { data: candidate, isLoading } = useQuery<CandidateRow>({
+  const { data: candidate, isLoading, isError } = useQuery<CandidateRow>({
     queryKey: ['candidate', id],
     queryFn: () => getCandidate(Number(id)),
+    retry: 1,
+  });
+
+  const { data: listData } = useQuery<CandidateListResponse>({
+    queryKey: ['candidates-nav', filter, listPage],
+    queryFn: () => listCandidates({
+      reviewStatus: filter || undefined,
+      page: Number(listPage),
+      limit: 20,
+    }),
   });
 
   const { data: reviews } = useQuery<ReviewRow[]>({
@@ -95,6 +106,15 @@ export default function CandidateDetailPage() {
     },
   });
 
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-4">
+        <p className="text-gray-400">후보자를 찾을 수 없습니다.</p>
+        <Link href="/candidates" className="text-sm text-blue-500 hover:underline">← 목록으로 돌아가기</Link>
+      </div>
+    );
+  }
+
   if (isLoading || !candidate) {
     return (
       <div className="flex items-center justify-center h-64 text-gray-400">
@@ -105,8 +125,10 @@ export default function CandidateDetailPage() {
 
   const backUrl = `/candidates${filter ? `?reviewStatus=${filter}&page=${listPage}` : `?page=${listPage}`}`;
 
-  const prevId = Number(id) - 1;
-  const nextId = Number(id) + 1;
+  const candidateIds = listData?.data.map((c) => c.id) ?? [];
+  const currentIndex = candidateIds.indexOf(Number(id));
+  const prevId = currentIndex > 0 ? candidateIds[currentIndex - 1] : null;
+  const nextId = currentIndex >= 0 && currentIndex < candidateIds.length - 1 ? candidateIds[currentIndex + 1] : null;
 
   return (
     <div className="max-w-6xl mx-auto pb-24">
@@ -338,7 +360,7 @@ export default function CandidateDetailPage() {
       <div className="fixed bottom-0 inset-x-0 bg-white border-t shadow-[0_-2px_8px_rgba(0,0,0,0.08)] z-50 pb-[env(safe-area-inset-bottom)]">
         <div className="max-w-6xl mx-auto flex items-center justify-between px-4 py-3">
           {/* Previous candidate */}
-          {prevId >= 1 ? (
+          {prevId ? (
             <Link
               href={`/candidate/${prevId}?${searchParams.toString()}`}
               className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900 min-h-[44px] px-2"
@@ -374,12 +396,18 @@ export default function CandidateDetailPage() {
           </div>
 
           {/* Next candidate */}
-          <Link
-            href={`/candidate/${nextId}?${searchParams.toString()}`}
-            className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900 min-h-[44px] px-2"
-          >
-            다음 후보 →
-          </Link>
+          {nextId ? (
+            <Link
+              href={`/candidate/${nextId}?${searchParams.toString()}`}
+              className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900 min-h-[44px] px-2"
+            >
+              다음 후보 →
+            </Link>
+          ) : (
+            <span className="flex items-center gap-1 text-sm text-gray-300 min-h-[44px] px-2">
+              다음 후보 →
+            </span>
+          )}
         </div>
       </div>
     </div>
