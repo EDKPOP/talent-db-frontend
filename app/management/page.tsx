@@ -34,10 +34,12 @@ function ManagementCard({
   candidate,
   reviews,
   onContactChange,
+  navParams,
 }: {
   candidate: CandidateWithExtras;
   reviews: ReviewRow[];
   onContactChange: (id: number, status: string) => void;
+  navParams: string;
 }) {
   const currentContact = candidate.contactStatus ?? '미연락';
   const displayContact = CONTACT_STATUSES.includes(currentContact as typeof CONTACT_STATUSES[number])
@@ -64,7 +66,7 @@ function ManagementCard({
       </div>
 
       {/* Profile image + username */}
-      <Link href={`/candidate/${candidate.id}`}>
+      <Link href={`/candidate/${candidate.id}?${navParams}`}>
         <div className="relative aspect-[3/4] bg-gray-200">
           {candidate.profileImageUrl ? (
             <Image
@@ -178,6 +180,13 @@ export default function ManagementPage() {
 
   const totalPages = data ? Math.ceil(data.total / data.limit) : 0;
 
+  const navParams = new URLSearchParams({
+    source: 'management',
+    reviewStatuses: statuses,
+    page: String(page),
+    ...(gender !== '전체' ? { gender } : {}),
+  }).toString();
+
   return (
     <div className="max-w-7xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">합격 후보 관리</h1>
@@ -239,6 +248,7 @@ export default function ManagementPage() {
               onContactChange={(id, contactStatus) =>
                 contactMutation.mutate({ id, contactStatus })
               }
+              navParams={navParams}
             />
           ))}
         </div>

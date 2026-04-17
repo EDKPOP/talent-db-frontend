@@ -49,7 +49,10 @@ export default function CandidateDetailPage() {
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
+  const source = searchParams.get('source') ?? '';
   const filter = searchParams.get('filter') ?? '';
+  const reviewStatuses = searchParams.get('reviewStatuses') ?? '';
+  const gender = searchParams.get('gender') ?? '';
   const listPage = searchParams.get('page') ?? '1';
 
   const [commentText, setCommentText] = useState('');
@@ -63,13 +66,13 @@ export default function CandidateDetailPage() {
     retry: 1,
   });
 
+  const navQuery = source === 'management'
+    ? { reviewStatuses: reviewStatuses || undefined, gender: gender || undefined, page: Number(listPage), limit: 20 }
+    : { reviewStatus: filter || undefined, page: Number(listPage), limit: 20 };
+
   const { data: listData } = useQuery<CandidateListResponse>({
-    queryKey: ['candidates-nav', filter, listPage],
-    queryFn: () => listCandidates({
-      reviewStatus: filter || undefined,
-      page: Number(listPage),
-      limit: 20,
-    }),
+    queryKey: ['candidates-nav', source, filter, reviewStatuses, gender, listPage],
+    queryFn: () => listCandidates(navQuery),
   });
 
   const { data: reviews } = useQuery<ReviewRow[]>({
@@ -123,7 +126,9 @@ export default function CandidateDetailPage() {
     );
   }
 
-  const backUrl = `/candidates${filter ? `?reviewStatus=${filter}&page=${listPage}` : `?page=${listPage}`}`;
+  const backUrl = source === 'management'
+    ? `/management`
+    : `/candidates${filter ? `?reviewStatus=${filter}&page=${listPage}` : `?page=${listPage}`}`;
 
   const candidateIds = listData?.data.map((c) => c.id) ?? [];
   const currentIndex = candidateIds.indexOf(Number(id));
