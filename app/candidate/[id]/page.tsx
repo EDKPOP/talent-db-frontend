@@ -123,7 +123,6 @@ export default function CandidateDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['reviews', id] });
       queryClient.invalidateQueries({ queryKey: ['candidate', id] });
       queryClient.invalidateQueries({ queryKey: ['candidates'] });
-      queryClient.invalidateQueries({ queryKey: ['candidates-nav'] });
     },
   });
 
