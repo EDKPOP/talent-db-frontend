@@ -7,6 +7,7 @@ import Image from 'next/image';
 import { listCandidates, bulkUpdateCandidates } from '@/lib/api';
 import type { CandidateListResponse, CandidateWithExtras } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/lib/auth-context';
 
 const REVIEW_STATUS_TABS = ['전체', '합격', '보류', '불합격', '미검토'] as const;
 const GENDER_OPTIONS = ['전체', '남성', '여성'] as const;
@@ -100,6 +101,8 @@ function CandidateCard({
 
 export default function CandidatesPage() {
   const router = useRouter();
+  const { user } = useAuth();
+  const userId = user?.email ?? '';
   const [page, setPage] = useState(1);
   const [reviewStatus, setReviewStatus] = useState<string>('전체');
   const [gender, setGender] = useState<string>('전체');
@@ -108,7 +111,7 @@ export default function CandidatesPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   const { data, isLoading } = useQuery<CandidateListResponse>({
-    queryKey: ['candidates', { page, reviewStatus, gender, selectedYears, includeUnknownBirthYear }],
+    queryKey: ['candidates', { page, reviewStatus, gender, selectedYears, includeUnknownBirthYear, userId }],
     queryFn: () =>
       listCandidates({
         page,
@@ -117,6 +120,7 @@ export default function CandidatesPage() {
         gender: gender === '전체' ? undefined : gender,
         birthYears: selectedYears.length > 0 ? selectedYears.join(',') : undefined,
         includeUnknownBirthYear: includeUnknownBirthYear ? 'true' : undefined,
+        userId: userId || undefined,
       }),
   });
 
@@ -135,6 +139,7 @@ export default function CandidatesPage() {
     const params = new URLSearchParams();
     if (reviewStatus !== '전체') params.set('filter', reviewStatus);
     params.set('page', String(page));
+    if (userId) params.set('userId', userId);
     router.push(`/candidate/${id}?${params.toString()}`);
   };
 

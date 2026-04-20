@@ -54,6 +54,7 @@ export default function CandidateDetailPage() {
   const reviewStatuses = searchParams.get('reviewStatuses') ?? '';
   const gender = searchParams.get('gender') ?? '';
   const listPage = searchParams.get('page') ?? '1';
+  const userIdParam = searchParams.get('userId') ?? '';
 
   const [commentText, setCommentText] = useState('');
   const { user } = useAuth();
@@ -66,9 +67,10 @@ export default function CandidateDetailPage() {
     retry: 1,
   });
 
+  const navUserId = userIdParam || reviewerId || undefined;
   const navQuery = source === 'management'
-    ? { reviewStatuses: reviewStatuses || undefined, gender: gender || undefined, page: Number(listPage), limit: 20 }
-    : { reviewStatus: filter || undefined, page: Number(listPage), limit: 20 };
+    ? { reviewStatuses: reviewStatuses || undefined, gender: gender || undefined, page: Number(listPage), limit: 20, userId: navUserId }
+    : { reviewStatus: filter || undefined, page: Number(listPage), limit: 20, userId: navUserId };
 
   const { data: listData } = useQuery<CandidateListResponse>({
     queryKey: ['candidates-nav', source, filter, reviewStatuses, gender, listPage],
@@ -85,12 +87,12 @@ export default function CandidateDetailPage() {
   const isFirstOnPage = currentIndex === 0 && candidateIds.length > 0;
 
   const nextPageNavQuery = source === 'management'
-    ? { reviewStatuses: reviewStatuses || undefined, gender: gender || undefined, page: currentPage + 1, limit: 20 }
-    : { reviewStatus: filter || undefined, page: currentPage + 1, limit: 20 };
+    ? { reviewStatuses: reviewStatuses || undefined, gender: gender || undefined, page: currentPage + 1, limit: 20, userId: navUserId }
+    : { reviewStatus: filter || undefined, page: currentPage + 1, limit: 20, userId: navUserId };
 
   const prevPageNavQuery = source === 'management'
-    ? { reviewStatuses: reviewStatuses || undefined, gender: gender || undefined, page: currentPage - 1, limit: 20 }
-    : { reviewStatus: filter || undefined, page: currentPage - 1, limit: 20 };
+    ? { reviewStatuses: reviewStatuses || undefined, gender: gender || undefined, page: currentPage - 1, limit: 20, userId: navUserId }
+    : { reviewStatus: filter || undefined, page: currentPage - 1, limit: 20, userId: navUserId };
 
   const { data: nextPageData } = useQuery<CandidateListResponse>({
     queryKey: ['candidates-nav', source, filter, reviewStatuses, gender, String(currentPage + 1)],
@@ -120,6 +122,8 @@ export default function CandidateDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reviews', id] });
       queryClient.invalidateQueries({ queryKey: ['candidate', id] });
+      queryClient.invalidateQueries({ queryKey: ['candidates'] });
+      queryClient.invalidateQueries({ queryKey: ['candidates-nav'] });
     },
   });
 
