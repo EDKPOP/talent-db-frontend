@@ -432,22 +432,27 @@ export default function CandidateDetailPage() {
       {/* Fixed bottom bar */}
       <div className="fixed bottom-0 inset-x-0 bg-white border-t shadow-[0_-2px_8px_rgba(0,0,0,0.08)] z-50 pb-[env(safe-area-inset-bottom)]">
         <div className="max-w-6xl mx-auto flex items-center justify-between px-4 py-3">
-          {/* Previous candidate */}
-          {prevId ? (
-            <Link
-              href={`/candidate/${prevId}?${buildNavSearchParams(prevPage)}`}
-              className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900 min-h-[44px] px-2"
-            >
-              ← 이전 후보
-            </Link>
-          ) : (
+          {/* Left: back to list + previous candidate */}
+          <div className="flex items-center gap-3">
             <Link
               href={backUrl}
-              className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900 min-h-[44px] px-2"
+              className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900 min-h-[44px] px-2 border-r pr-4"
             >
               ← 목록
             </Link>
-          )}
+            {prevId ? (
+              <Link
+                href={`/candidate/${prevId}?${buildNavSearchParams(prevPage)}`}
+                className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900 min-h-[44px] px-2"
+              >
+                ‹ 이전 후보
+              </Link>
+            ) : (
+              <span className="flex items-center gap-1 text-sm text-gray-300 min-h-[44px] px-2">
+                ‹ 이전 후보
+              </span>
+            )}
+          </div>
 
           {/* Review buttons */}
           <div className="flex gap-2">
