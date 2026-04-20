@@ -75,6 +75,35 @@ export default function CandidateDetailPage() {
     queryFn: () => listCandidates(navQuery),
   });
 
+  const currentPage = Number(listPage);
+  const candidateIds = listData?.data.map((c) => c.id) ?? [];
+  const currentIndex = candidateIds.indexOf(Number(id));
+  const totalPages = listData ? Math.ceil(listData.total / listData.limit) : 0;
+  const hasNextPage = currentPage < totalPages;
+  const hasPrevPage = currentPage > 1;
+  const isLastOnPage = currentIndex >= 0 && currentIndex === candidateIds.length - 1;
+  const isFirstOnPage = currentIndex === 0 && candidateIds.length > 0;
+
+  const nextPageNavQuery = source === 'management'
+    ? { reviewStatuses: reviewStatuses || undefined, gender: gender || undefined, page: currentPage + 1, limit: 20 }
+    : { reviewStatus: filter || undefined, page: currentPage + 1, limit: 20 };
+
+  const prevPageNavQuery = source === 'management'
+    ? { reviewStatuses: reviewStatuses || undefined, gender: gender || undefined, page: currentPage - 1, limit: 20 }
+    : { reviewStatus: filter || undefined, page: currentPage - 1, limit: 20 };
+
+  const { data: nextPageData } = useQuery<CandidateListResponse>({
+    queryKey: ['candidates-nav', source, filter, reviewStatuses, gender, String(currentPage + 1)],
+    queryFn: () => listCandidates(nextPageNavQuery),
+    enabled: isLastOnPage && hasNextPage,
+  });
+
+  const { data: prevPageData } = useQuery<CandidateListResponse>({
+    queryKey: ['candidates-nav', source, filter, reviewStatuses, gender, String(currentPage - 1)],
+    queryFn: () => listCandidates(prevPageNavQuery),
+    enabled: isFirstOnPage && hasPrevPage,
+  });
+
   const { data: reviews } = useQuery<ReviewRow[]>({
     queryKey: ['reviews', id],
     queryFn: () => listReviews(Number(id)),
@@ -130,10 +159,30 @@ export default function CandidateDetailPage() {
     ? `/management`
     : `/candidates${filter ? `?reviewStatus=${filter}&page=${listPage}` : `?page=${listPage}`}`;
 
-  const candidateIds = listData?.data.map((c) => c.id) ?? [];
-  const currentIndex = candidateIds.indexOf(Number(id));
-  const prevId = currentIndex > 0 ? candidateIds[currentIndex - 1] : null;
-  const nextId = currentIndex >= 0 && currentIndex < candidateIds.length - 1 ? candidateIds[currentIndex + 1] : null;
+  let prevId: number | null = null;
+  let prevPage = currentPage;
+  let nextId: number | null = null;
+  let nextPage = currentPage;
+
+  if (currentIndex > 0) {
+    prevId = candidateIds[currentIndex - 1];
+  } else if (prevPageData?.data.length) {
+    prevId = prevPageData.data[prevPageData.data.length - 1].id;
+    prevPage = currentPage - 1;
+  }
+
+  if (currentIndex >= 0 && currentIndex < candidateIds.length - 1) {
+    nextId = candidateIds[currentIndex + 1];
+  } else if (nextPageData?.data.length) {
+    nextId = nextPageData.data[0].id;
+    nextPage = currentPage + 1;
+  }
+
+  const buildNavSearchParams = (pageNum: number) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('page', String(pageNum));
+    return params.toString();
+  };
 
   return (
     <div className="max-w-6xl mx-auto pb-24">
@@ -382,7 +431,7 @@ export default function CandidateDetailPage() {
           {/* Previous candidate */}
           {prevId ? (
             <Link
-              href={`/candidate/${prevId}?${searchParams.toString()}`}
+              href={`/candidate/${prevId}?${buildNavSearchParams(prevPage)}`}
               className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900 min-h-[44px] px-2"
             >
               ← 이전 후보
@@ -418,7 +467,7 @@ export default function CandidateDetailPage() {
           {/* Next candidate */}
           {nextId ? (
             <Link
-              href={`/candidate/${nextId}?${searchParams.toString()}`}
+              href={`/candidate/${nextId}?${buildNavSearchParams(nextPage)}`}
               className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900 min-h-[44px] px-2"
             >
               다음 후보 →
