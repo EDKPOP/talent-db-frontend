@@ -2,7 +2,6 @@
 
 export interface CandidateRow {
   id: number;
-  airtableId: string | null;
   username: string | null;
   profileLink: string | null;
   fullname: string | null;
@@ -126,7 +125,6 @@ export interface CandidateListResponse {
 
 export interface ReviewRow {
   id: number;
-  airtableId?: string;
   candidateId: number;
   status: string;
   reviewerId?: string;
@@ -145,7 +143,6 @@ export interface CreateReviewBody {
 
 export interface CommentRow {
   id: number;
-  airtableId?: string;
   candidateId: number;
   text?: string;
   type?: string;
