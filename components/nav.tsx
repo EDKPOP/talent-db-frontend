@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { href: '/candidates', label: '지원자 목록', icon: '👥' },
   { href: '/management', label: '합격 후보 관리', icon: '✅' },
   { href: '/add-profile', label: '수동 추가', icon: '➕' },
+  { href: '/outbound', label: '아웃바운드 대상', icon: '📣' },
 ];
 
 export function Nav() {

@@ -172,3 +172,22 @@ export interface DashboardStats {
   scraper_status: 'RUNNING' | 'IDLE';
   updated_at: string | null;
 }
+
+export interface OutboundCandidateRow {
+  id: number;
+  instagram_username: string;
+  instagram_user_id: string | null;
+  signals_hit: Record<string, number> | null;
+  score: number;
+  source_run_id: string | null;
+  status: 'pending' | 'contacted' | 'archived';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OutboundCandidateListResponse {
+  data: OutboundCandidateRow[];
+  total: number;
+  page: number;
+  limit: number;
+}

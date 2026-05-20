@@ -11,6 +11,8 @@ import type {
   CommentRow,
   CreateCommentBody,
   DashboardStats,
+  OutboundCandidateRow,
+  OutboundCandidateListResponse,
 } from './types';
 
 const api = axios.create({
@@ -131,4 +133,16 @@ export async function deleteComment(id: number): Promise<void> {
 export async function getDashboard(): Promise<DashboardStats> {
   const { data } = await api.get<DashboardStats>('/dashboard');
   return data;
+}
+
+// ── Outbound Candidates ─────────────────────────────────
+
+export async function listOutboundCandidates(params: { page?: number; limit?: number; status?: string }): Promise<OutboundCandidateListResponse> {
+  const { data } = await api.get<OutboundCandidateListResponse>('/outbound-candidates', { params });
+  return data;
+}
+
+export async function updateOutboundCandidateStatus(id: number, status: string): Promise<OutboundCandidateRow> {
+  const { data } = await api.patch<{ data: OutboundCandidateRow }>(`/outbound-candidates/${id}`, { status });
+  return data.data;
 }
