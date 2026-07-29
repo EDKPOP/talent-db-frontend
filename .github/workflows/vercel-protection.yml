@@ -1,24 +1,34 @@
-name: Vercel Deployment Protection (enable)
+name: Vercel Firewall — deny rule (enable only, COU-2063)
 
-# Self-service path to turn Vercel Deployment Protection ON using the VERCEL_*
-# repo secrets that already exist in this repository.
+# CEO-approved reversible lockdown of the two public production hosts
+# (COU-2186 decision -> COU-2194 -> COU-2195 -> COU-2063).
 #
-# There is deliberately NO disable path in this workflow (COU-2056).
-# The old "Disable Vercel Deployment Protection" step in ci.yml was removed in
-# the same PR that introduced this file; do not reintroduce either one.
+# Vercel Authentication (Deployment Protection) is not available on this plan:
+# PATCH /v9/projects/{id} answered 428 invalid_sso_protection (COU-2114), so the
+# approved mechanism is a Vercel Firewall (WAF) custom deny rule instead.
+#
+# This file lives on branch ops/cou-2063-firewall-deny and is dispatched with
+# --ref on that branch. It is deliberately NOT merged to main: a push to main
+# runs ci.yml -> deploy-production, and deployments are forbidden by COU-2056.
+#
+# Enable-only, like the deployment-protection workflow it replaces on this ref:
+#   * only rules.insert is used - never PUT (whole-config replace) or DELETE,
+#     so existing rules and IP lists are never removed;
+#   * there is no disable path here. Reverting is one manual step in the Vercel
+#     console (Firewall -> the rule -> toggle off), recorded on COU-2063.
 
 on:
   workflow_dispatch:
     inputs:
       action:
-        description: 'Only "enable" is supported. Disabling protection is blocked by COU-2056.'
+        description: 'Only "enable" is supported. Removing the block is blocked by COU-2056.'
         type: choice
         required: true
         default: enable
         options:
           - enable
       scope:
-        description: 'Vercel Authentication scope. "all" also protects custom production domains (casting.keens.academy). "standard" leaves custom production domains publicly reachable.'
+        description: 'Kept for dispatch compatibility with the same-path workflow on main. Ignored here: the deny rule always covers both production hosts.'
         type: choice
         required: true
         default: all
@@ -26,7 +36,7 @@ on:
           - all
           - standard
       extra_project_ids:
-        description: 'Optional comma-separated extra Vercel project IDs. Only needed if the target hosts are not all aliases of the VERCEL_PROJECT_ID project.'
+        description: 'Unused. Both target hosts are already known to live in VERCEL_PROJECT_ID (COU-2114).'
         type: string
         required: false
         default: ''
@@ -39,20 +49,18 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  enable:
-    name: Enable Vercel Deployment Protection
+  deny:
+    name: Insert Firewall deny rule
     runs-on: ubuntu-latest
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
       ACTION: ${{ inputs.action }}
-      SCOPE: ${{ inputs.scope }}
-      EXTRA_PROJECT_IDS: ${{ inputs.extra_project_ids }}
-      # Hosts that must end up protected. Reported per project in the job summary.
+      RULE_NAME: 'COU-2063 lockdown'
       TARGET_HOSTS: 'casting.keens.academy talent-db-frontend.vercel.app'
     steps:
-      - name: Enable protection on every target project
+      - name: Insert deny rule and verify with status codes
         run: |
           set -euo pipefail
 
@@ -68,19 +76,13 @@ jobs:
             fi
           done
 
-          case "$SCOPE" in
-            all)      deployment_type='all' ;;
-            standard) deployment_type='prod_deployment_urls_and_all_previews' ;;
-            *)        echo "::error::Unknown scope '$SCOPE'."; exit 1 ;;
-          esac
-
           body_file="$(mktemp)"
           trap 'rm -f "$body_file"' EXIT
 
-          # Calls the Vercel API and echoes ONLY the HTTP status code.
-          # The response body lands in $body_file and is never dumped wholesale:
-          # every read goes through jq and extracts named fields only, so the
-          # token and any other credential material can never reach the log.
+          # Echoes ONLY the HTTP status code. The response body lands in
+          # $body_file and is never dumped wholesale: every read goes through jq
+          # and extracts named fields only, so no credential material and no
+          # candidate data can reach the log.
           api() {
             local method="$1" path="$2" data="${3:-}"
             local args=(
@@ -97,135 +99,141 @@ jobs:
           }
 
           field() { jq -r "$1" < "$body_file"; }
-
-          # Vercel reports "off" as a null object; normalise for the summary.
-          sso_state()      { field '.ssoProtection.deploymentType // "off"'; }
-          password_state() { field 'if .passwordProtection == null then "off" else "on" end'; }
-
           api_error() {
-            local code msg
-            code="$(field '.error.code // "unknown"')"
-            msg="$(field '.error.message // "no message"')"
-            printf '%s: %s' "$code" "$msg"
+            printf '%s: %s' "$(field '.error.code // "unknown"')" "$(field '.error.message // "no message"')"
           }
 
-          project_ids="$VERCEL_PROJECT_ID"
-          if [ -n "$EXTRA_PROJECT_IDS" ]; then
-            project_ids="$project_ids $(printf '%s' "$EXTRA_PROJECT_IDS" | tr ',' ' ')"
-          fi
+          cfg_qs="projectId=${VERCEL_PROJECT_ID}&teamId=${VERCEL_ORG_ID}"
 
           {
-            echo "## Vercel Deployment Protection — enable"
+            echo "## Vercel Firewall — deny rule (COU-2063)"
             echo
-            echo "Requested scope: \`$SCOPE\` (\`ssoProtection.deploymentType=$deployment_type\`)"
+            echo "Rule name: \`$RULE_NAME\` · target hosts: \`$TARGET_HOSTS\`"
             echo
-            echo "| Project | Hosts | GET before | ssoProtection before | PATCH | GET after | ssoProtection after | passwordProtection after |"
-            echo "| --- | --- | --- | --- | --- | --- | --- | --- |"
           } >> "$GITHUB_STEP_SUMMARY"
 
-          covered_hosts=''
-          failed=0
+          # --- current config -------------------------------------------------
+          get_code="$(api GET "/v1/security/firewall/config/active?${cfg_qs}")"
+          if [ "$get_code" != "200" ]; then
+            detail="$(api_error)"
+            echo "::error::GET firewall config returned $get_code ($detail)"
+            echo "- GET firewall config: **$get_code** — $detail" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          rules_before="$(field '(.rules // []) | length')"
+          names_before="$(field '[(.rules // [])[].name] | join(", ")')"
+          firewall_enabled="$(field '.firewallEnabled // "unset"')"
+          existing="$(field '[(.rules // [])[] | select(.name == "'"$RULE_NAME"'")] | length')"
+          echo "- GET firewall config: **200** · rules before: **$rules_before** (\`$names_before\`) · firewallEnabled: \`$firewall_enabled\`" >> "$GITHUB_STEP_SUMMARY"
 
-          for project_id in $project_ids; do
-            [ -n "$project_id" ] || continue
+          # --- insert ---------------------------------------------------------
+          deny_action='{"mitigate":{"action":"deny"}}'
+          host_eq_groups='[{"conditions":[{"type":"host","op":"eq","value":"casting.keens.academy"}]},{"conditions":[{"type":"host","op":"eq","value":"talent-db-frontend.vercel.app"}]}]'
+          host_inc_group='[{"conditions":[{"type":"host","op":"inc","value":["casting.keens.academy","talent-db-frontend.vercel.app"]}]}]'
+          catch_all_group='[{"conditions":[{"type":"path","op":"pre","value":"/"}]}]'
 
-            get_before="$(api GET "/v9/projects/${project_id}?teamId=${VERCEL_ORG_ID}")"
-            if [ "$get_before" != "200" ]; then
-              echo "::error::GET project $project_id returned $get_before ($(api_error))"
-              echo "| \`$project_id\` | — | $get_before | — | skipped | — | — | — |" >> "$GITHUB_STEP_SUMMARY"
-              failed=1
-              continue
-            fi
-            project_name="$(field '.name // "unknown"')"
-            sso_before="$(sso_state)"
+          mk_payload() {
+            jq -cn --arg name "$RULE_NAME" --argjson group "$1" --argjson act "$2" \
+              '{action:"rules.insert", id:null, value:{
+                  name:$name,
+                  description:"CEO-approved reversible block of unauthenticated public access (COU-2186/COU-2194/COU-2063). Revert = disable this rule.",
+                  active:true,
+                  conditionGroup:$group,
+                  action:$act
+                }}'
+          }
 
-            # Hostnames are not secret and are needed as evidence that both
-            # target hosts are actually covered by a project we just patched.
-            domains_code="$(api GET "/v9/projects/${project_id}/domains?teamId=${VERCEL_ORG_ID}&limit=100")"
-            if [ "$domains_code" = "200" ]; then
-              hosts="$(field '[.domains[].name] | join(", ")')"
-              # Space-separated on purpose: the membership test below matches on
-              # " host " and would miss newline-separated entries.
-              covered_hosts="$covered_hosts $(field '[.domains[].name] | join(" ")')"
-            else
-              hosts="(domain list unavailable: HTTP $domains_code)"
-            fi
+          inserted=''
+          variant_used=''
+          if [ "$existing" != "0" ]; then
+            inserted=1
+            variant_used='pre-existing'
+            echo "- rule \`$RULE_NAME\` already present ($existing) — skipping insert, verifying effect only" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
-            patch_code="$(api PATCH "/v9/projects/${project_id}?teamId=${VERCEL_ORG_ID}" \
-              "{\"ssoProtection\":{\"deploymentType\":\"${deployment_type}\"}}")"
-            if [ "$patch_code" != "200" ]; then
+          if [ -z "$inserted" ]; then
+            for variant in host_eq host_inc catch_all; do
+              case "$variant" in
+                host_eq)   payload="$(mk_payload "$host_eq_groups" "$deny_action")" ;;
+                host_inc)  payload="$(mk_payload "$host_inc_group" "$deny_action")" ;;
+                catch_all) payload="$(mk_payload "$catch_all_group" "$deny_action")" ;;
+              esac
+
+              patch_code="$(api PATCH "/v1/security/firewall/config?${cfg_qs}" "$payload")"
+              if [ "$patch_code" = "200" ]; then
+                inserted=1
+                variant_used="$variant"
+                echo "- rules.insert (\`$variant\`): **200**" >> "$GITHUB_STEP_SUMMARY"
+                break
+              fi
+
               detail="$(api_error)"
+              echo "::warning::rules.insert variant '$variant' returned $patch_code ($detail)"
+              echo "- rules.insert (\`$variant\`): **$patch_code** — $detail" >> "$GITHUB_STEP_SUMMARY"
               case "$patch_code" in
-                402|403)
-                  echo "::error::PATCH project $project_id returned $patch_code — Vercel Authentication is not available on this plan/token scope ($detail)"
-                  note="**plan/permission constraint:** $detail"
-                  ;;
-                *)
-                  echo "::error::PATCH project $project_id returned $patch_code ($detail)"
-                  note="$detail"
+                401|402|403)
+                  echo "::error::Firewall custom rules rejected with $patch_code — plan or token-scope constraint, not a payload problem."
+                  echo "> **Plan/permission constraint** ($patch_code). Custom firewall rules are not usable with this plan or token. No alternative mechanism attempted; reported to COU-2063." >> "$GITHUB_STEP_SUMMARY"
+                  exit 1
                   ;;
               esac
-              echo "| \`$project_name\` | $hosts | $get_before | $sso_before | **$patch_code** | — | — | — |" >> "$GITHUB_STEP_SUMMARY"
-              echo "> Project \`$project_name\`: $note" >> "$GITHUB_STEP_SUMMARY"
-              failed=1
-              continue
-            fi
-
-            get_after="$(api GET "/v9/projects/${project_id}?teamId=${VERCEL_ORG_ID}")"
-            if [ "$get_after" != "200" ]; then
-              echo "::error::Verification GET for project $project_id returned $get_after ($(api_error))"
-              echo "| \`$project_name\` | $hosts | $get_before | $sso_before | $patch_code | **$get_after** | unverified | unverified |" >> "$GITHUB_STEP_SUMMARY"
-              failed=1
-              continue
-            fi
-
-            sso_after="$(sso_state)"
-            password_after="$(password_state)"
-            echo "| \`$project_name\` | $hosts | $get_before | $sso_before | $patch_code | $get_after | **$sso_after** | $password_after |" >> "$GITHUB_STEP_SUMMARY"
-
-            if [ "$sso_after" != "$deployment_type" ]; then
-              echo "::error::Project $project_name: expected ssoProtection.deploymentType=$deployment_type after PATCH but read '$sso_after'"
-              failed=1
-            fi
-          done
-
-          # A green run must mean both hosts are genuinely covered, so verify the
-          # target hosts belong to a project we actually patched.
-          missing=''
-          for host in $TARGET_HOSTS; do
-            case " $covered_hosts " in
-              *" $host "*) ;;
-              *) missing="$missing $host" ;;
-            esac
-          done
-
-          {
-            echo
-            if [ -n "$missing" ]; then
-              echo "> **Target hosts not found in any processed project:**$missing"
-              echo ">"
-              echo "> They are not aliases of the processed project(s). Re-run with \`extra_project_ids\` set to the project ID that owns them."
-            else
-              echo "> All target hosts ($TARGET_HOSTS) belong to the processed project(s)."
-            fi
-            if [ "$SCOPE" = "standard" ]; then
-              echo ">"
-              echo "> **Scope \`standard\` leaves custom production domains publicly reachable** (it covers \`*.vercel.app\` production deployment URLs and previews only). Re-run with scope \`all\` to also protect \`casting.keens.academy\`."
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          if [ -n "$missing" ]; then
-            echo "::error::Target hosts not covered by any processed project:$missing"
-            failed=1
+            done
           fi
 
-          if [ "$SCOPE" = "standard" ]; then
-            echo "::warning::Scope 'standard' does not protect custom production domains such as casting.keens.academy."
-          fi
-
-          if [ "$failed" -ne 0 ]; then
-            echo "::error::Deployment Protection was not fully enabled. See the job summary."
+          if [ -z "$inserted" ]; then
+            echo "::error::Every rules.insert variant was rejected. Nothing was changed."
             exit 1
           fi
 
-          echo "Deployment Protection enabled (ssoProtection.deploymentType=$deployment_type) on: $project_ids"
+          # --- make sure the firewall itself is on -----------------------------
+          get_code="$(api GET "/v1/security/firewall/config/active?${cfg_qs}")"
+          if [ "$get_code" = "200" ] && [ "$(field '.firewallEnabled // true')" = "false" ]; then
+            enable_code="$(api PATCH "/v1/security/firewall/config?${cfg_qs}" '{"action":"firewallEnabled","id":null,"value":true}')"
+            echo "- firewallEnabled -> true: **$enable_code**" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # --- verify stored state ---------------------------------------------
+          get_code="$(api GET "/v1/security/firewall/config/active?${cfg_qs}")"
+          if [ "$get_code" != "200" ]; then
+            echo "::error::Verification GET returned $get_code ($(api_error))"
+            exit 1
+          fi
+          rule_id="$(field '[(.rules // [])[] | select(.name == "'"$RULE_NAME"'")][-1].id // "unknown"')"
+          rule_active="$(field '[(.rules // [])[] | select(.name == "'"$RULE_NAME"'")][-1].active // "unknown"')"
+          rules_after="$(field '(.rules // []) | length')"
+          {
+            echo "- stored rule: id \`$rule_id\` · active \`$rule_active\` · variant \`$variant_used\` · rules after: **$rules_after** (before: $rules_before)"
+            echo
+            echo "### Status codes after the rule (measured from the runner)"
+            echo
+            echo "| Host | Path | Status |"
+            echo "| --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # --- verify effect: GET only, status codes only ----------------------
+          sleep 20
+          still_open=''
+          for host in $TARGET_HOSTS; do
+            for path in / /candidates /candidate/1; do
+              code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 25 "https://${host}${path}" || echo 000)"
+              echo "| \`$host\` | \`$path\` | **$code** |" >> "$GITHUB_STEP_SUMMARY"
+              echo "$host$path -> $code"
+              if [ "$code" = "200" ]; then
+                still_open="$still_open ${host}${path}"
+              fi
+            done
+          done
+
+          if [ -n "$still_open" ]; then
+            echo "::error::Still returning 200 after the deny rule:$still_open"
+            {
+              echo
+              echo "> **Block incomplete — still 200:**$still_open"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          {
+            echo
+            echo "> All six target URLs are non-200. Revert = disable rule \`$RULE_NAME\` in the Vercel console (one step)."
+          } >> "$GITHUB_STEP_SUMMARY"
