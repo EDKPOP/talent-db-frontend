@@ -1,0 +1,231 @@
+name: Vercel Deployment Protection (enable)
+
+# Self-service path to turn Vercel Deployment Protection ON using the VERCEL_*
+# repo secrets that already exist in this repository.
+#
+# There is deliberately NO disable path in this workflow (COU-2056).
+# The old "Disable Vercel Deployment Protection" step in ci.yml was removed in
+# the same PR that introduced this file; do not reintroduce either one.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Only "enable" is supported. Disabling protection is blocked by COU-2056.'
+        type: choice
+        required: true
+        default: enable
+        options:
+          - enable
+      scope:
+        description: 'Vercel Authentication scope. "all" also protects custom production domains (casting.keens.academy). "standard" leaves custom production domains publicly reachable.'
+        type: choice
+        required: true
+        default: all
+        options:
+          - all
+          - standard
+      extra_project_ids:
+        description: 'Optional comma-separated extra Vercel project IDs. Only needed if the target hosts are not all aliases of the VERCEL_PROJECT_ID project.'
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vercel-protection
+  cancel-in-progress: false
+
+jobs:
+  enable:
+    name: Enable Vercel Deployment Protection
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      ACTION: ${{ inputs.action }}
+      SCOPE: ${{ inputs.scope }}
+      EXTRA_PROJECT_IDS: ${{ inputs.extra_project_ids }}
+      # Hosts that must end up protected. Reported per project in the job summary.
+      TARGET_HOSTS: 'casting.keens.academy talent-db-frontend.vercel.app'
+    steps:
+      - name: Enable protection on every target project
+        run: |
+          set -euo pipefail
+
+          if [ "$ACTION" != "enable" ]; then
+            echo "::error::Only 'enable' is supported by this workflow (COU-2056)."
+            exit 1
+          fi
+
+          for required in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
+            if [ -z "${!required}" ]; then
+              echo "::error::Repo secret $required is not set."
+              exit 1
+            fi
+          done
+
+          case "$SCOPE" in
+            all)      deployment_type='all' ;;
+            standard) deployment_type='prod_deployment_urls_and_all_previews' ;;
+            *)        echo "::error::Unknown scope '$SCOPE'."; exit 1 ;;
+          esac
+
+          body_file="$(mktemp)"
+          trap 'rm -f "$body_file"' EXIT
+
+          # Calls the Vercel API and echoes ONLY the HTTP status code.
+          # The response body lands in $body_file and is never dumped wholesale:
+          # every read goes through jq and extracts named fields only, so the
+          # token and any other credential material can never reach the log.
+          api() {
+            local method="$1" path="$2" data="${3:-}"
+            local args=(
+              --silent --show-error
+              --output "$body_file"
+              --write-out '%{http_code}'
+              --request "$method"
+              --header "Authorization: Bearer $VERCEL_TOKEN"
+            )
+            if [ -n "$data" ]; then
+              args+=(--header 'Content-Type: application/json' --data "$data")
+            fi
+            curl "${args[@]}" "https://api.vercel.com${path}"
+          }
+
+          field() { jq -r "$1" < "$body_file"; }
+
+          # Vercel reports "off" as a null object; normalise for the summary.
+          sso_state()      { field '.ssoProtection.deploymentType // "off"'; }
+          password_state() { field 'if .passwordProtection == null then "off" else "on" end'; }
+
+          api_error() {
+            local code msg
+            code="$(field '.error.code // "unknown"')"
+            msg="$(field '.error.message // "no message"')"
+            printf '%s: %s' "$code" "$msg"
+          }
+
+          project_ids="$VERCEL_PROJECT_ID"
+          if [ -n "$EXTRA_PROJECT_IDS" ]; then
+            project_ids="$project_ids $(printf '%s' "$EXTRA_PROJECT_IDS" | tr ',' ' ')"
+          fi
+
+          {
+            echo "## Vercel Deployment Protection — enable"
+            echo
+            echo "Requested scope: \`$SCOPE\` (\`ssoProtection.deploymentType=$deployment_type\`)"
+            echo
+            echo "| Project | Hosts | GET before | ssoProtection before | PATCH | GET after | ssoProtection after | passwordProtection after |"
+            echo "| --- | --- | --- | --- | --- | --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          covered_hosts=''
+          failed=0
+
+          for project_id in $project_ids; do
+            [ -n "$project_id" ] || continue
+
+            get_before="$(api GET "/v9/projects/${project_id}?teamId=${VERCEL_ORG_ID}")"
+            if [ "$get_before" != "200" ]; then
+              echo "::error::GET project $project_id returned $get_before ($(api_error))"
+              echo "| \`$project_id\` | — | $get_before | — | skipped | — | — | — |" >> "$GITHUB_STEP_SUMMARY"
+              failed=1
+              continue
+            fi
+            project_name="$(field '.name // "unknown"')"
+            sso_before="$(sso_state)"
+
+            # Hostnames are not secret and are needed as evidence that both
+            # target hosts are actually covered by a project we just patched.
+            domains_code="$(api GET "/v9/projects/${project_id}/domains?teamId=${VERCEL_ORG_ID}&limit=100")"
+            if [ "$domains_code" = "200" ]; then
+              hosts="$(field '[.domains[].name] | join(", ")')"
+              # Space-separated on purpose: the membership test below matches on
+              # " host " and would miss newline-separated entries.
+              covered_hosts="$covered_hosts $(field '[.domains[].name] | join(" ")')"
+            else
+              hosts="(domain list unavailable: HTTP $domains_code)"
+            fi
+
+            patch_code="$(api PATCH "/v9/projects/${project_id}?teamId=${VERCEL_ORG_ID}" \
+              "{\"ssoProtection\":{\"deploymentType\":\"${deployment_type}\"}}")"
+            if [ "$patch_code" != "200" ]; then
+              detail="$(api_error)"
+              case "$patch_code" in
+                402|403)
+                  echo "::error::PATCH project $project_id returned $patch_code — Vercel Authentication is not available on this plan/token scope ($detail)"
+                  note="**plan/permission constraint:** $detail"
+                  ;;
+                *)
+                  echo "::error::PATCH project $project_id returned $patch_code ($detail)"
+                  note="$detail"
+                  ;;
+              esac
+              echo "| \`$project_name\` | $hosts | $get_before | $sso_before | **$patch_code** | — | — | — |" >> "$GITHUB_STEP_SUMMARY"
+              echo "> Project \`$project_name\`: $note" >> "$GITHUB_STEP_SUMMARY"
+              failed=1
+              continue
+            fi
+
+            get_after="$(api GET "/v9/projects/${project_id}?teamId=${VERCEL_ORG_ID}")"
+            if [ "$get_after" != "200" ]; then
+              echo "::error::Verification GET for project $project_id returned $get_after ($(api_error))"
+              echo "| \`$project_name\` | $hosts | $get_before | $sso_before | $patch_code | **$get_after** | unverified | unverified |" >> "$GITHUB_STEP_SUMMARY"
+              failed=1
+              continue
+            fi
+
+            sso_after="$(sso_state)"
+            password_after="$(password_state)"
+            echo "| \`$project_name\` | $hosts | $get_before | $sso_before | $patch_code | $get_after | **$sso_after** | $password_after |" >> "$GITHUB_STEP_SUMMARY"
+
+            if [ "$sso_after" != "$deployment_type" ]; then
+              echo "::error::Project $project_name: expected ssoProtection.deploymentType=$deployment_type after PATCH but read '$sso_after'"
+              failed=1
+            fi
+          done
+
+          # A green run must mean both hosts are genuinely covered, so verify the
+          # target hosts belong to a project we actually patched.
+          missing=''
+          for host in $TARGET_HOSTS; do
+            case " $covered_hosts " in
+              *" $host "*) ;;
+              *) missing="$missing $host" ;;
+            esac
+          done
+
+          {
+            echo
+            if [ -n "$missing" ]; then
+              echo "> **Target hosts not found in any processed project:**$missing"
+              echo ">"
+              echo "> They are not aliases of the processed project(s). Re-run with \`extra_project_ids\` set to the project ID that owns them."
+            else
+              echo "> All target hosts ($TARGET_HOSTS) belong to the processed project(s)."
+            fi
+            if [ "$SCOPE" = "standard" ]; then
+              echo ">"
+              echo "> **Scope \`standard\` leaves custom production domains publicly reachable** (it covers \`*.vercel.app\` production deployment URLs and previews only). Re-run with scope \`all\` to also protect \`casting.keens.academy\`."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -n "$missing" ]; then
+            echo "::error::Target hosts not covered by any processed project:$missing"
+            failed=1
+          fi
+
+          if [ "$SCOPE" = "standard" ]; then
+            echo "::warning::Scope 'standard' does not protect custom production domains such as casting.keens.academy."
+          fi
+
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::Deployment Protection was not fully enabled. See the job summary."
+            exit 1
+          fi
+
+          echo "Deployment Protection enabled (ssoProtection.deploymentType=$deployment_type) on: $project_ids"
