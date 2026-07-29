@@ -1,28 +1,26 @@
-'use client';
+import { LoginForm } from '@/components/login-form';
+import { getSessionSecret } from '@/lib/session';
 
-import { useState, FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/auth-context';
+/**
+ * 게이트 활성 여부는 서버 env 로만 알 수 있으므로 이 페이지는 서버 컴포넌트로 두고
+ * 폼만 클라이언트로 내린다 (COU-2114).
+ */
+export const dynamic = 'force-dynamic';
 
-export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [error, setError] = useState('');
-  const { login } = useAuth();
-  const router = useRouter();
+/** 같은 오리진의 경로만 허용 — 오픈 리다이렉트 방지. */
+function safeRedirectTarget(next: string | string[] | undefined): string {
+  if (typeof next !== 'string') return '/';
+  if (!next.startsWith('/') || next.startsWith('//')) return '/';
+  return next;
+}
 
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setError('');
-
-    const trimmed = email.trim().toLowerCase();
-    if (!trimmed.endsWith('@c-3.co')) {
-      setError('@c-3.co 도메인 이메일만 허용됩니다.');
-      return;
-    }
-
-    login(trimmed);
-    router.replace('/');
-  }
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string | string[] }>;
+}) {
+  const { next } = await searchParams;
+  const gateEnabled = getSessionSecret() !== null;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -30,31 +28,12 @@ export default function LoginPage() {
         <div className="bg-white rounded-2xl shadow-lg p-8">
           <h1 className="text-2xl font-bold text-center mb-2">Casting DB</h1>
           <p className="text-sm text-gray-500 text-center mb-8">
-            Welcome back. Please enter your @c-3.co email to continue.
+            {gateEnabled
+              ? '@c-3.co 이메일과 접근 코드를 입력하세요.'
+              : 'Welcome back. Please enter your @c-3.co email to continue.'}
           </p>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="yourname@c-3.co"
-                required
-                className="w-full px-4 py-3 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-              />
-              {error && (
-                <p className="mt-1.5 text-sm text-red-500">{error}</p>
-              )}
-            </div>
-
-            <button
-              type="submit"
-              className="w-full py-3 rounded-lg bg-gray-900 text-white text-sm font-semibold hover:bg-gray-800 transition-colors"
-            >
-              Access System
-            </button>
-          </form>
+          <LoginForm gateEnabled={gateEnabled} redirectTo={safeRedirectTarget(next)} />
 
           <p className="mt-6 text-xs text-gray-400 text-center">
             Authorized access only. All activity is logged.
