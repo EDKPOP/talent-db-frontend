@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { listCandidates, bulkUpdateCandidates } from '@/lib/api';
+import { mediaProxyUrl } from '@/lib/media-url';
 import type { CandidateListResponse, CandidateWithExtras } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
@@ -24,6 +25,8 @@ function CandidateCard({
   onSelect: (id: number) => void;
   onClick: (id: number) => void;
 }) {
+  const profileImage = mediaProxyUrl(candidate.profileImageUrl);
+
   return (
     <div
       className={cn(
@@ -54,9 +57,9 @@ function CandidateCard({
 
       {/* Profile image */}
       <div className="relative aspect-[3/4] bg-gray-200">
-        {candidate.profileImageUrl ? (
+        {profileImage ? (
           <Image
-            src={candidate.profileImageUrl}
+            src={profileImage}
             alt={candidate.username ?? ''}
             fill
             className="object-cover"

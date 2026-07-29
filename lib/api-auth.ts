@@ -1,23 +1,15 @@
 import axios from 'axios';
 
 /**
- * talent-api 인증의 단일 출처(single source of truth).
+ * talent-api 인증 상태(401 여부)의 단일 출처.
  *
- * ⚠️ 트레이드오프 — 현재 저장소의 모든 페이지는 `'use client'` + `useQuery` 구조라
- * 브라우저가 talent-api 를 직접 호출한다. 그래서 토큰을 브라우저까지 내려보내려면
- * `NEXT_PUBLIC_` 접두사가 필요한데, Next.js 는 이 값을 빌드 시점에 클라이언트 번들에
- * 그대로 인라인한다. 즉 이 토큰은 사실상 공개값이며 비밀이 아니다.
+ * ⚠️ 토큰은 여기 없다. COU-2079 결정 2(a) 에 따라 bearer 토큰은 서버 env
+ * (`TALENT_API_TOKEN`) 전용이고, 브라우저는 `/api/proxy/*` · `/api/media/*` 서버
+ * 라우트만 호출한다. 토큰 접근은 `lib/server/talent-api.ts` 와 라우트 핸들러 안에서만
+ * 일어나며, `NEXT_PUBLIC_*` 토큰은 결정으로 금지되어 있다 — 다시 도입하지 말 것.
  *
- * 이것은 최종안이 아니다. 백엔드 전 라우트 인증 게이트가 배포될 때 UI 가 전면 401 이
- * 되는 것을 막기 위한 최소 동반 변경일 뿐이다. 최종 구조(프런트 프록시 라우트 또는
- * 서버 세션)가 결정되면 `getApiToken()` 한 곳만 교체하면 되도록 토큰 접근 지점을
- * 여기로 일원화해 두었다. 호출부에는 절대 흩뿌리지 말 것.
+ * 이 모듈은 클라이언트 번들에 포함되므로 비밀값을 절대 넣지 말 것.
  */
-export function getApiToken(): string | undefined {
-  // NEXT_PUBLIC_* 는 빌드 시 정적 치환되므로 반드시 리터럴로 참조해야 한다.
-  return process.env.NEXT_PUBLIC_API_TOKEN || undefined;
-}
-
 export type ApiAuthStatus = 'ok' | 'unauthorized';
 
 let status: ApiAuthStatus = 'ok';
