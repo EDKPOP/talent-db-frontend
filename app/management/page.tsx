@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Image from 'next/image';
 import Link from 'next/link';
 import { listCandidates, updateCandidate, listReviewsBulk, listDistinctReviewers } from '@/lib/api';
+import { mediaProxyUrl } from '@/lib/media-url';
 import type { CandidateListResponse, CandidateWithExtras, ReviewRow } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -45,6 +46,7 @@ function ManagementCard({
   const displayContact = CONTACT_STATUSES.includes(currentContact as typeof CONTACT_STATUSES[number])
     ? currentContact
     : '미연락';
+  const profileImage = mediaProxyUrl(candidate.profileImageUrl);
 
   return (
     <div className="bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-shadow">
@@ -68,9 +70,9 @@ function ManagementCard({
       {/* Profile image + username */}
       <Link href={`/candidate/${candidate.id}?${navParams}`}>
         <div className="relative aspect-[3/4] bg-gray-200">
-          {candidate.profileImageUrl ? (
+          {profileImage ? (
             <Image
-              src={candidate.profileImageUrl}
+              src={profileImage}
               alt={candidate.username ?? ''}
               fill
               className="object-cover"

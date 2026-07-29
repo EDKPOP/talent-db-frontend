@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getApiToken, isUnauthorizedError, setApiAuthStatus } from './api-auth';
+import { isUnauthorizedError, setApiAuthStatus } from './api-auth';
 import type {
   CandidateRow,
   CandidateListResponse,
@@ -16,18 +16,16 @@ import type {
   OutboundCandidateListResponse,
 } from './types';
 
+/**
+ * 모든 데이터 요청은 같은 오리진의 서버 라우트 프록시를 거친다.
+ *
+ * bearer 토큰은 서버 env 전용이고 브라우저는 보지 못한다 (COU-2079 결정 2(a)).
+ * Authorization 헤더는 `app/api/proxy/[...path]/route.ts` 가 서버에서 붙이므로
+ * 여기에는 인증 관련 코드가 없다. 아래 API 함수들의 시그니처·경로는 그대로다.
+ */
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL,
+  baseURL: '/api/proxy',
   headers: { 'Content-Type': 'application/json' },
-});
-
-// 인증 헤더는 여기 한 곳에서만 붙인다. 호출부에 흩뿌리지 말 것.
-api.interceptors.request.use((config) => {
-  const token = getApiToken();
-  if (token) {
-    config.headers.set('Authorization', `Bearer ${token}`);
-  }
-  return config;
 });
 
 // 401 은 전역 상태로만 알린다. 여기서 재시도하거나 리다이렉트하지 않는다

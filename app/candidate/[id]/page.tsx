@@ -14,6 +14,7 @@ import {
   createComment,
   updateCandidate,
 } from '@/lib/api';
+import { mediaProxyUrl, mediaProxyUrls } from '@/lib/media-url';
 import type { CandidateRow, CandidateListResponse, ReviewRow, CommentRow } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
@@ -158,6 +159,12 @@ export default function CandidateDetailPage() {
     );
   }
 
+  // 모든 미디어는 서버 라우트 프록시를 거친다 (lib/media-url.ts).
+  const profileImage = mediaProxyUrl(candidate.profileImageUrl);
+  const bestPostImage = mediaProxyUrl(candidate.bestPostImageUrl);
+  const sampleImages = mediaProxyUrls(candidate.sampleImageUrls);
+  const sampleVideos = mediaProxyUrls(candidate.sampleVideos);
+
   const backUrl = source === 'management'
     ? `/management`
     : `/candidates${filter ? `?reviewStatus=${filter}&page=${listPage}` : `?page=${listPage}`}`;
@@ -194,9 +201,9 @@ export default function CandidateDetailPage() {
         <div className="col-span-12 md:col-span-5 space-y-4">
           {/* Main profile image */}
           <div className="relative aspect-[3/4] bg-gray-200 rounded-xl overflow-hidden">
-            {candidate.profileImageUrl ? (
+            {profileImage ? (
               <Image
-                src={candidate.profileImageUrl}
+                src={profileImage}
                 alt={candidate.username ?? ''}
                 fill
                 className="object-cover"
@@ -208,12 +215,12 @@ export default function CandidateDetailPage() {
           </div>
 
           {/* Best engagement post */}
-          {candidate.bestPostImageUrl && (
+          {bestPostImage && (
             <div className="bg-white rounded-xl p-4 shadow-sm">
               <h3 className="text-sm font-semibold mb-2 text-gray-500">TOP ENGAGEMENT</h3>
               <div className="relative aspect-square rounded-lg overflow-hidden bg-gray-100">
                 <Image
-                  src={candidate.bestPostImageUrl}
+                  src={bestPostImage}
                   alt="Best post"
                   fill
                   className="object-cover"
@@ -329,11 +336,11 @@ export default function CandidateDetailPage() {
           </div>
 
           {/* Sample images gallery */}
-          {candidate.sampleImageUrls && candidate.sampleImageUrls.length > 0 && (
+          {sampleImages.length > 0 && (
             <div className="bg-white rounded-xl p-6 shadow-sm">
               <h3 className="text-sm font-semibold text-gray-500 mb-3">샘플 이미지</h3>
               <div className="grid grid-cols-3 gap-2">
-                {candidate.sampleImageUrls.map((url, i) => (
+                {sampleImages.map((url, i) => (
                   <div key={i} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100">
                     <Image src={url} alt={`Sample ${i + 1}`} fill className="object-cover" sizes="150px" />
                   </div>
@@ -343,11 +350,11 @@ export default function CandidateDetailPage() {
           )}
 
           {/* Sample videos */}
-          {candidate.sampleVideos && candidate.sampleVideos.length > 0 && (
+          {sampleVideos.length > 0 && (
             <div className="bg-white rounded-xl p-6 shadow-sm">
               <h3 className="text-sm font-semibold text-gray-500 mb-3">샘플 비디오</h3>
               <div className="space-y-2">
-                {candidate.sampleVideos.map((url, i) => (
+                {sampleVideos.map((url, i) => (
                   <video key={i} src={url} controls className="w-full rounded-lg" />
                 ))}
               </div>
