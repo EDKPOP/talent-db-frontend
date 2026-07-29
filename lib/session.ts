@@ -24,8 +24,9 @@ export interface SessionPayload {
 /**
  * 게이트 시크릿. **설정되어 있을 때만 게이트가 켜진다.**
  *
- * 되돌리기는 정확히 1스텝 — 호스팅 환경변수에서 `SITE_ACCESS_SECRET` 를 제거하면
- * 배포 없이 게이트가 꺼지고 이전 동작으로 복귀한다.
+ * 되돌리기는 호스팅 환경변수에서 `SITE_ACCESS_SECRET` 를 제거하는 것뿐이다 — 코드
+ * 변경은 필요 없다. Vercel 은 환경변수 변경을 기존 배포에 소급 적용하지 않으므로
+ * `변수 삭제 + 재배포 1회` 가 실제 절차다 (`proxy.ts` 주석 참고).
  */
 export function getSessionSecret(): string | null {
   const secret = process.env.SITE_ACCESS_SECRET;

@@ -9,8 +9,11 @@ import { SESSION_COOKIE, getSessionSecret, verifySession } from '@/lib/session';
  * `proxy` 컨벤션 — 구 `middleware`)은 라우터 전단에서 돌기 때문에 클라이언트 우회가
  * 불가능한 유일한 지점이다.
  *
- * 켜고 끄기는 정확히 1스텝 — 호스팅 환경변수 `SITE_ACCESS_SECRET` 의 유무가 전부다.
- * 값이 없으면 게이트는 통째로 비활성이고 이 파일은 현행 동작을 바꾸지 않는다.
+ * 켜고 끄기는 호스팅 환경변수 `SITE_ACCESS_SECRET` 의 유무가 전부다 — 코드 revert 도
+ * PR 되돌림도 필요 없다. 값이 없으면 게이트는 통째로 비활성이고 이 파일은 현행 동작을
+ * 바꾸지 않는다. 다만 Vercel 환경변수 변경은 **기존 배포에 소급 적용되지 않으므로**
+ * 실제 되돌리기는 `변수 삭제 + 재배포 1회` 두 스텝이다 (COU-2063 의 "정확히 1스텝"
+ * 요건 대비 정정 — 2026-07-30 실측 보고).
  * (Vercel 플랜과 무관하게 동작하므로 Deployment Protection 428 제약을 받지 않는다.)
  */
 
