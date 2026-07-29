@@ -48,7 +48,7 @@ export function Nav() {
       <div className="ml-auto flex items-center gap-3">
         <span className="text-sm text-gray-500">{user.email}</span>
         <button
-          onClick={logout}
+          onClick={() => void logout()}
           className="text-sm text-gray-400 hover:text-gray-700 transition-colors"
         >
           Logout

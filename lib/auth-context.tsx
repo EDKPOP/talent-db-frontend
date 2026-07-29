@@ -10,7 +10,7 @@ interface AuthState {
 interface AuthContextValue {
   user: AuthState | null;
   login: (email: string) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -49,7 +49,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(state);
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    // 표시용 쿠키를 지우는 것만으로는 서버 세션(`casting-db-session`)이 남는다.
+    // 요청이 실패해도 서버 TTL 로 만료되므로 로컬 상태 정리는 그대로 진행한다.
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      /* 네트워크 실패는 무시 — 아래에서 로컬 상태는 반드시 정리한다. */
+    }
     deleteCookie(COOKIE_KEY);
     setUser(null);
   }, []);
