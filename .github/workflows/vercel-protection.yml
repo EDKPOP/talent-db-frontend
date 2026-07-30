@@ -310,13 +310,7 @@ jobs:
             echo "ENV lookup: HTTP $code — unknown"
           fi
 
-          # NEXT_PUBLIC_* is compiled into the client bundle, so its host is not
-          # secret. Still, only the hostname is ever printed: the value is piped
-          # straight into a host extractor and never echoed.
-          code="$(api_get "/v9/projects/${VERCEL_PROJECT_ID}/env?teamId=${VERCEL_ORG_ID}&decrypt=true")"
-          if [ "$code" = "200" ]; then
-            host="$(field '[.envs[] | select(.key=="NEXT_PUBLIC_API_URL") | .value][0] // ""' | sed -E 's#^[a-zA-Z]+://##; s#[/?].*$##; s#^[^@]*@##')"
-            echo "NEXT_PUBLIC_API_URL host: ${host:-unknown}"
-          else
-            echo "ENV lookup: HTTP $code — unknown"
-          fi
+          # No value lookup. `?decrypt=true` does not decrypt for this token, so
+          # it only yields the encrypted blob - which is noise in a log and adds
+          # nothing. The host behind NEXT_PUBLIC_API_URL stays "unknown" for
+          # COU-2063 item 6 rather than being guessed from repo code.
