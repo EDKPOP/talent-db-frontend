@@ -113,18 +113,32 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           # --- current config -------------------------------------------------
+          # 404 "Config not found" just means this project has never had a WAF
+          # config written; that is a valid starting point, not a failure.
+          config_missing=''
+          rules_before=0
+          existing=0
           get_code="$(api GET "/v1/security/firewall/config/active?${cfg_qs}")"
-          if [ "$get_code" != "200" ]; then
-            detail="$(api_error)"
-            echo "::error::GET firewall config returned $get_code ($detail)"
-            echo "- GET firewall config: **$get_code** — $detail" >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
-          rules_before="$(field '(.rules // []) | length')"
-          names_before="$(field '[(.rules // [])[].name] | join(", ")')"
-          firewall_enabled="$(field '.firewallEnabled // "unset"')"
-          existing="$(field '[(.rules // [])[] | select(.name == "'"$RULE_NAME"'")] | length')"
-          echo "- GET firewall config: **200** · rules before: **$rules_before** (\`$names_before\`) · firewallEnabled: \`$firewall_enabled\`" >> "$GITHUB_STEP_SUMMARY"
+          case "$get_code" in
+            200)
+              rules_before="$(field '(.rules // []) | length')"
+              names_before="$(field '[(.rules // [])[].name] | join(", ")')"
+              firewall_enabled="$(field '.firewallEnabled // "unset"')"
+              existing="$(field '[(.rules // [])[] | select(.name == "'"$RULE_NAME"'")] | length')"
+              echo "- GET firewall config: **200** · rules before: **$rules_before** (\`$names_before\`) · firewallEnabled: \`$firewall_enabled\`" >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            404)
+              config_missing=1
+              echo "::warning::GET firewall config returned 404 ($(api_error)) — no WAF config exists yet for this project."
+              echo "- GET firewall config: **404** — no config yet (rules before: 0)" >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *)
+              detail="$(api_error)"
+              echo "::error::GET firewall config returned $get_code ($detail)"
+              echo "- GET firewall config: **$get_code** — $detail" >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+              ;;
+          esac
 
           # --- insert ---------------------------------------------------------
           deny_action='{"mitigate":{"action":"deny"}}'
@@ -180,8 +194,32 @@ jobs:
             done
           fi
 
+          # If the project has no config at all, rules.insert can have nothing to
+          # patch. Writing a fresh config is then the only way in - and it
+          # deletes nothing, because the GET above proved there is nothing there.
+          if [ -z "$inserted" ] && [ -n "$config_missing" ]; then
+            put_payload="$(jq -cn --arg name "$RULE_NAME" --argjson group "$host_eq_groups" --argjson act "$deny_action" \
+              '{firewallEnabled:true, managedRules:{}, ips:[], rules:[{
+                  name:$name,
+                  description:"CEO-approved reversible block of unauthenticated public access (COU-2186/COU-2194/COU-2063). Revert = disable this rule.",
+                  active:true,
+                  conditionGroup:$group,
+                  action:$act
+                }]}')"
+            put_code="$(api PUT "/v1/security/firewall/config?${cfg_qs}" "$put_payload")"
+            if [ "$put_code" = "200" ]; then
+              inserted=1
+              variant_used='put_fresh_config'
+              echo "- PUT fresh firewall config (no prior config existed): **200**" >> "$GITHUB_STEP_SUMMARY"
+            else
+              detail="$(api_error)"
+              echo "::error::PUT firewall config returned $put_code ($detail)"
+              echo "- PUT fresh firewall config: **$put_code** — $detail" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+
           if [ -z "$inserted" ]; then
-            echo "::error::Every rules.insert variant was rejected. Nothing was changed."
+            echo "::error::Every write variant was rejected. Nothing was changed."
             exit 1
           fi
 
