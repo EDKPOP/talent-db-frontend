@@ -275,3 +275,48 @@ jobs:
             echo
             echo "> All six target URLs are non-200. Revert = disable rule \`$RULE_NAME\` in the Vercel console (one step)."
           } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "STORED RULE id=$rule_id active=$rule_active variant=$variant_used rules_after=$rules_after"
+
+      - name: Read-only production origin report (COU-2063 item 6)
+        run: |
+          set -euo pipefail
+
+          # Read-only. GET only. Prints the git source of the current production
+          # deployment and the NAMES of the environment variables - never their
+          # values (the env endpoint returns them encrypted and we only ever
+          # select .key), and never any response body wholesale.
+          body_file="$(mktemp)"
+          trap 'rm -f "$body_file"' EXIT
+
+          api_get() {
+            curl --silent --show-error --output "$body_file" --write-out '%{http_code}' \
+              --header "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com$1"
+          }
+          field() { jq -r "$1" < "$body_file"; }
+
+          code="$(api_get "/v6/deployments?projectId=${VERCEL_PROJECT_ID}&teamId=${VERCEL_ORG_ID}&target=production&limit=1&state=READY")"
+          if [ "$code" = "200" ]; then
+            echo "PROD DEPLOYMENT repo=$(field '.deployments[0].meta.githubOrg // "unknown"')/$(field '.deployments[0].meta.githubRepo // "unknown"') branch=$(field '.deployments[0].meta.githubCommitRef // "unknown"') sha=$(field '.deployments[0].meta.githubCommitSha // "unknown"') uid=$(field '.deployments[0].uid // "unknown"')"
+          else
+            echo "PROD DEPLOYMENT lookup: HTTP $code — unknown"
+          fi
+
+          code="$(api_get "/v9/projects/${VERCEL_PROJECT_ID}/env?teamId=${VERCEL_ORG_ID}")"
+          if [ "$code" = "200" ]; then
+            echo "ENV KEY NAMES: $(field '[.envs[].key] | unique | join(", ")')"
+            echo "ENV TARGETS for NEXT_PUBLIC_API_URL: $(field '[.envs[] | select(.key=="NEXT_PUBLIC_API_URL") | (.target // [] | join("/"))] | join(" ; ")')"
+          else
+            echo "ENV lookup: HTTP $code — unknown"
+          fi
+
+          # NEXT_PUBLIC_* is compiled into the client bundle, so its host is not
+          # secret. Still, only the hostname is ever printed: the value is piped
+          # straight into a host extractor and never echoed.
+          code="$(api_get "/v9/projects/${VERCEL_PROJECT_ID}/env?teamId=${VERCEL_ORG_ID}&decrypt=true")"
+          if [ "$code" = "200" ]; then
+            host="$(field '[.envs[] | select(.key=="NEXT_PUBLIC_API_URL") | .value][0] // ""' | sed -E 's#^[a-zA-Z]+://##; s#[/?].*$##; s#^[^@]*@##')"
+            echo "NEXT_PUBLIC_API_URL host: ${host:-unknown}"
+          else
+            echo "ENV lookup: HTTP $code — unknown"
+          fi
